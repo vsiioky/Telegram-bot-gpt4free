@@ -23,29 +23,42 @@ def trim_history(history, max_length=4096):
         current_length -= len(removed_message["content"])
     return history
 
-async def send_message_to_GPT(message, chat_history):
-    print("Запрос в GPT")
-    response = await g4f.ChatCompletion.create_async(
-        model=g4f.models.default,
-        messages=chat_history,
-        provider=g4f.Provider.Bing,
-    )
-    return response
 
-async def send_typing(response, message):
+async def send_typing(stop_event, message):
     print("печать")
-    while response == "":
-        for i in range(5):
-            await bot.send_chat_action.typing(message.chat.id)
-            await asyncio.sleep(1)  # Подождать 1 секунду перед отправкой следующего действия печати
+    ranges = 60
+    while not stop_event.is_set():
+        print("печать луп" + str(ranges))
+        await bot.send_chat_action(message.chat.id, 'typing')
+        await asyncio.sleep(1)  # Подождать 1 секунду перед отправкой следующего действия печати
         await asyncio.sleep(5)  # Подождать 5 секунд перед отправкой следующего набора действий печати
+        ranges -= 1
+        if ranges < 1:
+            stop_event.set()
 
-async def main(message, chat_history):
-    print("зашел в маин")
-    send_message_task = asyncio.create_task(send_message_to_GPT(message, chat_history))
-    send_typing_task = asyncio.create_task(send_typing(await send_message_task, message))
-    await send_message_task
-    await send_typing_task
+    print("Залуп закончился")
+
+async def send_message_to_GPT(message, chat_history):
+     print("Запрос в GPT")
+     stop_event = asyncio.Event()
+     task = asyncio.create_task(send_typing(stop_event, message))
+     response = await g4f.ChatCompletion.create_async(
+         model=g4f.models.default,
+        messages=chat_history,
+       provider=g4f.Provider.Bing,
+     )
+     stop_event.set()
+     return response
+
+
+#
+# async def main(message, chat_history):
+#     print("зашел в маин")
+#     send_message_task = asyncio.create_task(send_message_to_GPT(message, chat_history))
+#     send_typing_task = asyncio.create_task(send_typing(await send_message_task, message))
+#     await send_message_task
+#     await send_typing_task
+#     return send_typing_task.result()
 
 
 
@@ -62,7 +75,7 @@ async def process_clear_command(message: types.Message):
 
 @dp.message_handler(commands=['near'])
 async def process_clear_command2(message: types.Message):
-    user_message = "Найди ближайшие футбольные матчи и выведи их в виде списка. В тексте убери форматирование. Не пиши приветствие. В тексте убери все знаки *. ВЫВЕДИ ТОЛЬКО СПИСОК!"
+    user_message = "Найди ближайшие футбольные матчи и выведи их в виде списка. В списке должны быть только названия команд и дата время его проведенрия и больше ничего. В тексте убери форматирование. Важно Не пиши список источников."
     user_id = message.from_user.id
     if user_id not in conversation_history:
         conversation_history[user_id] = []
@@ -72,11 +85,12 @@ async def process_clear_command2(message: types.Message):
     chat_history = conversation_history[user_id]
 
     try:
-        print(message.text)
+
+        print("UserName @" + message.from_user.username)
+        print("Message " + message.text)
         await message.answer("Происходит сбор информации...")
-        print("gjgsnrf pfqnb d main")
-        response = asyncio.run(main(message, chat_history))
-        #response = await send_message_to_GPT(message, chat_history)
+        #response = await main(message, chat_history)
+        response = await send_message_to_GPT(message, chat_history)
         chat_gpt_response = response
 
     except Exception as e:
@@ -87,7 +101,6 @@ async def process_clear_command2(message: types.Message):
     print(conversation_history)
     length = sum(len(message["content"]) for message in conversation_history[user_id])
     print(length)
-    await message.answer(response)
     print(response + "Near resp")
     await message.reply(response)
 
@@ -101,7 +114,7 @@ async def process_clear_command(message: types.Message):
 @dp.message_handler()
 async def send_welcome(message: types.Message):
     user_id = message.from_user.id
-    user_message = "1.Представь что ты спортивный аналитик и ты должен проанализировать результаты поиска в интернете 2. Ты должен сделать подробные выводы по полученной информации 3.Ты не должен выводить в ответе мой запрос 4.Ты должен вывести источники которые использовал 5.Ты не должен отвечать текстом который содержит форматирование 6. НЕ ПИШИ НИЧЕГО ЧТО НЕ КАСАЕТСЯ АНАЛИТИКИ" + message.text
+    user_message = "1.Представь что ты спортивный аналитик и ты должен проанализировать результаты поиска в интернете 2. Ты должен сделать подробные выводы по полученной информации 3.Ты не должен выводить в ответе мой запрос 4.Ты должен вывести источники которые использовал в самом конце письма 5.Ты должен убрать все форматирование текста" + message.text
 
     if user_id not in conversation_history:
         conversation_history[user_id] = []
@@ -112,16 +125,12 @@ async def send_welcome(message: types.Message):
 
     try:
         print("Запрос в GPT")
-        print(message.text)
-        await message.answer("Происходит сбор информации...")
-        print("hello typing")
-        await bot.send_chat_action(message.chat.id, 'typing')
+        print("UserName @" + message.from_user.username)
+        print("Message " + message.text)
 
-        response = await g4f.ChatCompletion.create_async(
-            model=g4f.models.default,
-            messages=chat_history,
-            provider=g4f.Provider.Bing,
-        )
+        await message.answer("Происходит сбор информации...")
+        await bot.send_chat_action(message.chat.id, 'typing')
+        response = await send_message_to_GPT(message, chat_history)
         chat_gpt_response = response
 
     except Exception as e:
@@ -133,8 +142,8 @@ async def send_welcome(message: types.Message):
     length = sum(len(message["content"]) for message in conversation_history[user_id])
     print(length)
     await message.answer(chat_gpt_response)
-    await message.answer("Сыылка на контору")
-    await message.answer("промокод")
+    await message.answer("Заходи в MOSTBET и выйграй 25 000р бонусов!")
+    await message.answer("https://xo9d7f7z5v8r8bsmst.com/Vigs")
 
 # Запуск бота
 if __name__ == '__main__':
