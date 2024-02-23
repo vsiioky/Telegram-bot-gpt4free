@@ -133,14 +133,18 @@ async def send_welcome(message: types.Message):
         response = await send_message_to_GPT(message, chat_history)
         chat_gpt_response = response
 
+
     except Exception as e:
         print(f"{g4f.Provider.GeekGpt.__name__}:", e)
+
         chat_gpt_response = "Извините, произошла ошибка."
 
     conversation_history[user_id].append({"role": "assistant", "content": chat_gpt_response})
     print(conversation_history)
     length = sum(len(message["content"]) for message in conversation_history[user_id])
     print(length)
+    stop_event = asyncio.Event()
+    stop_event.set()
     await message.answer(chat_gpt_response)
     await message.answer("Заходи в MOSTBET и выйграй 25 000р бонусов!")
     await message.answer("https://xo9d7f7z5v8r8bsmst.com/Vigs")
